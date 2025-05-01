@@ -71,13 +71,13 @@ def build_tree(dna_alignments=None, protein_alignments=None, analysis_type=None,
             concatenated_alignment = concatenate_alignments(protein_alignments)
         elif analysis_type == 'joint':
             raxml_command.extend(['-m', 'GTRGAMMA', '-q', 'partitions.txt'])
-            concat_alignment_dict = {}
-            concat_alignment_dict['dna'] = concatenate_alignments(dna_alignments)
-            concat_alignment_dict['protein'] = concatenate_alignments(protein_alignments)
-            concatenated_alignment = concatenate_alignments(concat_alignment_dict)
-            seq_id = dna_alignments.keys()[0]
-            total_dna_length = len(concat_alignment_dict['dna'][seq_id])
-            total_protein_length = len(concat_alignment_dict['protein'][seq_id])
+            concat_dna = concatenate_alignments(dna_alignments)
+            concat_protein = concatenate_alignments(protein_alignments)
+            concatenated_alignment = {}
+            for seq_id in concat_dna:
+                concatenated_alignment[seq_id] = concat_dna[seq_id]+concat_protein[seq_id]
+            total_dna_length = len(concat_dna[seq_id])
+            total_protein_length = len(concat_protein[seq_id])
             with open("partitions.txt", 'w') as PART:
                 for i in range(1,4):
                     PART.write(f"DNA, codon{i} = {i}-{total_dna_length}\\3\n")
@@ -191,8 +191,18 @@ def main():
         joint_tree_file = open(f"joint_trees_sampleSize{sample_size}.nex", 'w') 
         joint_tree_file.write(f"#NEXUS\n\nBegin Taxa;\n  Dimensions ntax={len(genomeIds)};\n")
         joint_tree_file.write("  TaxLabels "+" ".join(sorted(genomeIds))+";\nEND;\n\nBegin TREES;\n")
+
     homologs_per_sample_file = open(f"homologs_sampleSize{sample_size}.txt", "w")
-    alignment_sample_score_file = open(f"alignment_sample_scores_sampleSize{sample_size}.txt", "w")
+
+    al_score_file_name = f"alignment_sample_scores_sampleSize{sample_size}"
+    if args.dna:
+        al_score_file_name += "_dna"
+    if args.protein:
+        al_score_file_name += "_protein"
+    if args.joint:
+        al_score_file_name += "_joint"
+    al_score_file_name += ".txt"
+    alignment_sample_score_file = open(al_score_file_name, "w")
     (dna_tree, protein_tree, joint_tree) = (None, None, None)
     first_iteration = True
     print(f" generate {int(sample_size/len(dna_list))} trees")
@@ -209,7 +219,7 @@ def main():
             dna_sample[homology_group] = dna_alignment[homology_group]
             protein_sample[homology_group] = protein_alignment[homology_group]
             homology_list.append(homology_group)
-        sample_label = f"sample_{sample_pos}"
+        sample_label = f"s_{sample_pos:04}x{sample_size}"
         homologs_per_sample_file.write(sample_label+"\t"+"\t".join(homology_list)+"\n")
 
         sample_scores = copy.deepcopy(alignment_score[homology_list[0]])
@@ -264,9 +274,12 @@ def main():
                 alignment_sample_score_file.write(f"{homolog} not used!\n")
         alignment_sample_score_file.flush()
 
-    dna_tree_file.write("END;")
-    protein_tree_file.write("END;")
-    joint_tree_file.write("END;")
+    if args.dna:
+        dna_tree_file.write("END;")
+    if args.protein:
+        protein_tree_file.write("END;")
+    if args.joint:
+        joint_tree_file.write("END;")
 
 if __name__ == '__main__':
     exit(main())
