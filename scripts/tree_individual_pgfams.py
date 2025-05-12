@@ -54,9 +54,9 @@ def build_gene_tree(alignment, alphabet='dna', program=None, protein_model=None,
     # Create a temporary directory
     original_dir = os.getcwd()
     #tmpdirname = tempfile.mkdtemp(prefix="assess_codon_tree")
-    tree_string = None
-    tree_likelihood = None
-    time = None
+    tree_string = ''
+    tree_likelihood = -1e6
+    time = 1.0
     if program == 'raxml':
         alignment_path = os.path.abspath(alignment)
         with tempfile.TemporaryDirectory(prefix="assess_codon_tree") as tmpdirname:
@@ -150,7 +150,7 @@ def main():
 
         (tree, likelihood, time) = build_gene_tree(alignment_file, program='fasttree', alphabet=args.alphabet, protein_model = args.proteinModel, threads = args.threads)
 
-        pgfam_tree_file.write(f"Tree {pgfam}_{args.alphabet} = {tree}\n")
+        pgfam_tree_file.write(f"Tree {pgfam}_{args.alphabet}_tree = {tree}\n")
         alignment_score_file.write(pgfam)
         for s in alignment_score_headers:
             alignment_score_file.write(f"\t{alignment_score[pgfam][s]:.3}")
