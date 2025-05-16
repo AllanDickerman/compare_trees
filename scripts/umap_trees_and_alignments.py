@@ -206,6 +206,8 @@ def main():
     alignment_global_score = {}
     alignment_vector_list = []
     alignment_names = []
+    average_alignment_score = 0
+    max_alignment_score = 0
     for alignment in alignment_counts:
         alignment_names.append(alignment+"_dna_alignment")
         alignment_vector = []
@@ -215,19 +217,26 @@ def main():
             pf = 0.0
             if bitstring in alignment_counts[alignment]:
                 pf = alignment_counts[alignment][bitstring]
-                score += alignment_counts[alignment][bitstring] * global_apart_freq[bs]
+                score += alignment_counts[alignment][bitstring] * global_apart_freq[bitstring]
             alignment_vector.append(pf)
         alignment_vector_list.append(alignment_vector)
         alignment_global_score[alignment] = score
+        average_alignment_score += score
+        if score > max_alignment_score:
+            max_alignment_score = score
 
-    alignment_global_score_file = "alignment_global_score.txt"
+    average_alignment_score /= len(alignment_counts)
+    print(f"average alignment score = {average_alignment_score}")
+    print(f"max alignment score = {max_alignment_score}")
+    alignment_global_score_file = "alignment_dot_product.txt"
     with open(alignment_global_score_file, 'w') as F:
-        F.write("PGFam\talignment_global_score\tlength\n")
+        F.write("PGFam\tdot_product\tpropMax\tlength\n")
         for pgfam in alignment_counts:
-            score = 1e10*alignment_global_score[pgfam]
-            F.write(f"{pgfam}\t{score:0.4f}\t{alignment_length[pgfam]}\n")
+            score = alignment_global_score[pgfam] 
+            prop = score / max_alignment_score
+            F.write(f"{pgfam}\t{score:0.4f}\t{prop:0.4f}\t{alignment_length[pgfam]}\n")
     print(f"alignment global scores written to {alignment_global_score_file}")
-    sys.exit()
+    #sys.exit()
 
 
     alignment_names.append("total_alignment")

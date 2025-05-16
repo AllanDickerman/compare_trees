@@ -2,6 +2,7 @@ import dendropy
 import sys
 import re
 import glob
+import argparse
 import statistics
 from dendropy.calculate import treecompare
 
@@ -69,35 +70,44 @@ def process_tree_file(ref_tree, treefile):
         stats["euclidean"].append(treecompare.euclidean_distance(ref_tree, tree))
     return stats
 
-
+def compare_trees_to_ref(tree_file, ref_tree):
+    tree_yielder = dendropy.Tree.yield_from_files(
+            files=[tree_file],
+            schema='nexus',
+            taxon_namespace=ref_tree.taxon_namespace,
+            )
+    stats = {'rfsym':[], 'rfdist':[], 'euclid':[]}
+    for tree_idx, one_tree in enumerate(tree_yielder):
+        tree_label = one_tree.label.replace(' ', '_')
+        stats['rfsym'].append(treecompare.symmetric_difference(ref_tree, one_tree))
+        stats['rfdist'].append(treecompare.weighted_robinson_foulds_distance(ref_tree, one_tree))
+        stats['euclid'].append(treecompare.euclidean_distance(ref_tree, one_tree))
+    return stats  
 
 def main():
-    treetype = sys.argv[1] # should be dna or protein or joint
-    reftreefile = sys.argv[2] # eg ref_dna.nwk
+    parser = argparse.ArgumentParser(description="Compare trees to reference tree", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--trees", metavar='files', type=str, nargs='*', help="nexus tree files")
+    parser.add_argument("--ref_tree", metavar='file', type=str, help="reference tree")
+
+    args = parser.parse_args()
+
+    print(f"tree files = {args.trees}")
+    print(f"ref tree = {args.ref_tree}")
     
-    print(f" tree type: {treetype}, reftree = {reftreefile}")
     genomes = dendropy.TaxonNamespace()
-    ref_tree = dendropy.Tree.get(path=reftreefile, schema="newick", taxon_namespace=genomes) 
+    ref_tree = dendropy.Tree.get(path=args.ref_tree, schema='nexus', taxon_namespace=genomes) 
 
-    tree_files = glob.glob(treetype+"_trees_sampleSize*.nwk")
-    #joint_trees_sampleSize100.nwk
-    data = {}
-    ss_file = {}
-    print("sample\tnt\tlenrat\tslenpr\tslenco\tcladps\tcladif\trfsymm\trfdist\teuclid")
-    for treefile in tree_files:
-        m = re.match(treetype+"_trees_sampleSize(\d+).nwk", treefile)
-        sample_size = int(m.group(1))
-        ss_file[sample_size] = treefile
-
-    for sample_size in sorted(ss_file):
-        treefile = ss_file[sample_size]
-        data = process_tree_file(ref_tree, treefile)
-        stat_mean = {}
-        num_trees = len(data['length_ratio'])
-        for s in data:
-            stat_mean[s] = float(statistics.mean(data[s]))
-        print(f'{sample_size}\t{num_trees}\t{stat_mean["length_ratio"]:.5}\t{stat_mean["shared_length_prop"]:.5}\t{stat_mean["shared_length_cor"]:.5}\t{stat_mean["shared_clades_prop"]:.5}\t{stat_mean["diff_clades"]:.2}  \t{stat_mean["robinsonfoulds"]:.3} \t{stat_mean["rf_distance"]:.5}\t{stat_mean["euclidean"]:.5}')  
-
+    print("sample\trfsymm\trfdist\teuclid")
+    for tree_file in args.trees:
+        stats = compare_trees_to_ref(tree_file, ref_tree)
+        m = re.match("dna_ags_decile_0(\d)", tree_file)
+        sys.stdout.write(f"Decile {m.group(1)}")
+        for s in ('rfsym', 'rfdist', 'euclid'):
+            #print(f"stats[{s}] = {stats[s]}")
+            mean = statistics.mean(stats[s])
+            stdev = statistics.stdev(stats[s])
+            sys.stdout.write(f"\t{mean:0.3f}+-{stdev:.3f}")
+        sys.stdout.write("\n")
 
     return(0)
 
