@@ -215,7 +215,10 @@ def main():
     (dna_tree, protein_tree, joint_tree) = (None, None, None)
     sample_scores = copy.deepcopy(alignment_score[PGFam])
     first_iteration = True
-    print(f" generate {int(sample_size/len(dna_list))} trees")
+    if sample_size > len(dna_list):
+        print(f"requested sample size is larger than number of pgfams ({len(dna_list)}), truncating")
+        sample_size = len(dna_list)
+    print(f" generate {int(len(dna_list)/sample_size)} trees")
     for sample_pos in range(0, len(dna_list)-sample_size+1, sample_size):
         if args.max_trees and (sample_pos/sample_size) >= args.max_trees:
             print(f" hit max_trees {args.max_trees}")

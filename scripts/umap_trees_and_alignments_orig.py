@@ -5,7 +5,6 @@ import glob
 import re
 import BitVector
 import argparse
-import math
 
 def read_fasta(fh):
     seqs={}
@@ -21,6 +20,7 @@ def read_fasta(fh):
     return seqs
 
 def count_alignment_partitions(al, seqid_list):
+    #seqid_list = sorted(al.keys())
     partition_counts = {}
     al_length = len(al[seqid_list[0]])
     #print(f"count_partitions, al_length = {al_length}")
@@ -39,7 +39,7 @@ def count_alignment_partitions(al, seqid_list):
             bitstring = str(bv)
             if bitstring not in partition_counts:
                 partition_counts[bitstring] = 0
-            partition_counts[bitstring] += 1/len(bitvector_dict)
+            partition_counts[bitstring] += 1
     return(partition_counts, al_length)
 
 def generate_umap_plot(data, n_neighbors=[10,30,100]):
@@ -47,7 +47,6 @@ def generate_umap_plot(data, n_neighbors=[10,30,100]):
     print("generate_umap_plot()")
     import umap.umap_ as umap
     umap_df = pandas.DataFrame(index = data.index)
-    data.fillna(0, inplace=True) # avoid errors around NaNs
     for n in n_neighbors:
         prefix = f"UMAP_N{n}_"
         reducer = umap.UMAP(n_neighbors = n)
@@ -79,7 +78,7 @@ def main():
     parser = argparse.ArgumentParser(description="Analye subsets of alignments, building trees", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--trees", metavar='files', type=str, nargs='*', help="nexus tree files")
     parser.add_argument("--alignments", metavar='dir', type=str, help="directory with alignments")
-    parser.add_argument("--write_matrix", action='store_true', help="write partition matrix and separate column list")
+    parser.add_argument("--write_matrix", action='store_true', help="write partition matrix")
 
     args = parser.parse_args()
 
@@ -87,7 +86,6 @@ def main():
     print(f"alignment dir = {args.alignments}")
 
     tree_bitstring_length = {}
-    tree_total_length = {}
     partition_count = {}
     global_tree_partition_length = {}
     taxa = dendropy.TaxonNamespace()
@@ -104,30 +102,19 @@ def main():
         #    tree_label = m.group(1) #pgfam
         tree_bitstring_length[tree_label] = {}
         bem = one_tree.bipartition_edge_map
-        total_length = 0 # normalize branch length to sum to 1.0
-        for bipart in bem:
-            total_length += bem[bipart].length
-        tree_total_length[tree_label] = total_length
         for bipart in bem:
             if (bem[bipart].length is not None):
                 bitstring = bipart.leafset_as_bitstring(reverse=True)
-                #tree_bitstring_length[tree_label][bitstring] = bem[bipart].length / total_length
-                tree_bitstring_length[tree_label][bitstring] = bem[bipart].length 
+                tree_bitstring_length[tree_label][bitstring] = bem[bipart].length
                 if not bitstring in partition_count:
                     partition_count[bitstring] = 0
                     global_tree_partition_length[bitstring] = 0
                 partition_count[bitstring] += 1
-                global_tree_partition_length[bitstring] += bem[bipart].length 
+                global_tree_partition_length[bitstring] += bem[bipart].length
     tree_bl_mean = 0
-    unnormalized_sum = 0
     for bs in global_tree_partition_length:
-        #global_tree_partition_length[bs] /= partition_count[bs]
-        # how to normalize??? above line or below
-        unnormalized_sum += global_tree_partition_length[bs]
-        global_tree_partition_length[bs] /= len(tree_bitstring_length)
+        global_tree_partition_length[bs] /= partition_count[bs]
         tree_bl_mean += global_tree_partition_length[bs]
-    print(f"sum of tree partition freq = {tree_bl_mean}")
-    print(f"unnormalized sum of global tree values = {unnormalized_sum}")
     tree_bl_mean /= len(global_tree_partition_length)
     print(f"num tree partitions = {len(global_tree_partition_length)}, mean len={tree_bl_mean}")
 
@@ -148,8 +135,6 @@ def main():
     if m:
         alignment_type = m.group(1)
     alignment_files = glob.glob(args.alignments+"/PGF*")
-    monomorphic_bs = '0'*len(taxon_list)
-    alignment_monomorphic_count = {}
     for alignment_file in alignment_files:
         #print(f"read {alignment_file}")
         m = re.search("(PGF_\d+)", alignment_file)
@@ -157,16 +142,15 @@ def main():
             pgfam = m.group(1)
         else:
             pgfam = alignment_file
-        pgfam += "_"+alignment_type
+        pgfam += alignment_type
         alignment_counts[pgfam] = {}
         with open(alignment_file) as F:
             al = read_fasta(F)
             pc, alength = count_alignment_partitions(al, taxon_list)
             total_length += alength
             alignment_length[pgfam] = alength
-            alignment_monomorphic_count[pgfam] = pc[monomorphic_bs]
             #print(f" num partitions = {len(pc)}")
-            for bs in pc:
+            for bs in sorted(pc, key=pc.get):
                 if bs not in global_apart_counts:
                     global_apart_counts[bs] = 0
                 global_apart_counts[bs] += pc[bs]
@@ -175,17 +159,9 @@ def main():
 
     global_apart_freq = {}
     afreq_mean = 0
-    num_in_tree = 0
-    sum_in_tree = 0
     for bs in global_apart_counts:
         global_apart_freq[bs] = global_apart_counts[bs] / total_length
         afreq_mean += global_apart_freq[bs]
-        if bs in global_tree_partition_length:
-            num_in_tree += 1
-            sum_in_tree += global_tree_partition_length[bs]
-    print(f"global alignment partitions in tree = {num_in_tree}")
-    print(f"sum of tree partiton lengths in alignments = {sum_in_tree}")
-    print(f"global alignment sum freq = {afreq_mean}")
     afreq_mean /= len(global_apart_freq)
     print(f"num global counts from alignments = {len(global_apart_counts)}, mean = {afreq_mean}")
 
@@ -229,81 +205,39 @@ def main():
 
 
     alignment_global_score = {}
-    alignment_self_score = {}
-    alignment_dist = {}
-    alignment_max_dev = {}
     alignment_vector_list = []
     alignment_names = []
     average_alignment_score = 0
-    max_alignment_score = [0,0,0]
-    alignment_freq_sum = {}
+    max_alignment_score = 0
     for alignment in alignment_counts:
-        alignment_names.append(alignment)
+        alignment_names.append(alignment+"_dna_alignment")
         alignment_vector = []
         #print(alignment)
-        score_list = [0,0,0]
-        self_list = [0,0,0]
-        dist_list = [0,0,0]
-        alignment_sum = 0
-        max_dev = 0.0
-        #for bitstring in global_apart_freq: #shared_bitstrings:
+        score = 0
         for bitstring in shared_bitstrings:
-            global_freq = global_apart_freq[bitstring]
-            numon = 0
-            for i in bitstring:
-                if i == '1':
-                    numon += 1
             pf = 0.0
             if bitstring in alignment_counts[alignment]:
                 pf = alignment_counts[alignment][bitstring]
-                for i in range(3):
-                    if numon >= i: #segregate scores for fixed states, autapomorphies, and synapomorphies
-                        score_list[i] += (pf * global_freq)  # sum of cross products = dot product = scalar product
-                        self_list[i] += (pf * pf)  # self dot product == sum of squares
-                alignment_sum += pf
+                score += alignment_counts[alignment][bitstring] * global_apart_freq[bitstring]
             alignment_vector.append(pf)
-            dist = (pf - global_freq) * (pf - global_freq)
-            for i in range(3):
-                if numon >= i: #segregate scores for fixed states, autapomorphies, and synapomorphies
-                    dist_list[i] += dist
-            if (pf - global_freq) > max_dev:
-                max_dev = (pf - global_freq)
-
         alignment_vector_list.append(alignment_vector)
-        alignment_global_score[alignment] = score_list
-        alignment_self_score[alignment] = self_list
-        alignment_dist[alignment] = dist_list
-        alignment_max_dev[alignment] = max_dev
-        alignment_freq_sum[alignment] = alignment_sum
-        average_alignment_score += score_list[0]
-        for i in range(3):
-            if score_list[i] > max_alignment_score[i]:
-                max_alignment_score[i] = score_list[i]
+        alignment_global_score[alignment] = score
+        average_alignment_score += score
+        if score > max_alignment_score:
+            max_alignment_score = score
 
     average_alignment_score /= len(alignment_counts)
     print(f"average alignment score = {average_alignment_score}")
     print(f"max alignment score = {max_alignment_score}")
     alignment_global_score_file = "alignment_dot_product.txt"
     with open(alignment_global_score_file, 'w') as F:
-        F.write("PGFam\tdprod0\tpMax0\tdprod1\tpMax1\tdprod2\tpMax2\tmaxDev\tdist0\tdist1\tdist2\tlength\tal_sum\tnum_patterns\tprop_fixed\n")
+        F.write("PGFam\tdot_product\tpropMax\tlength\n")
         for pgfam in alignment_counts:
-            F.write(pgfam)
-            for i in range(3):
-                score = alignment_global_score[pgfam][i] 
-                prop = score / max_alignment_score[i]
-                F.write(f"\t{score:0.5f}\t{prop:0.3f}")
-            F.write(f"\t{alignment_max_dev[pgfam]:0.5}")
-            for i in range(3):
-                #score = 0
-                #if alignment_self_score[pgfam][i]:
-                score = alignment_dist[pgfam][i] #alignment_global_score[pgfam][i] / alignment_self_score[pgfam][i] 
-                #    if score > 1.0:
-                #        score = 1.0
-                #prop = score / max_alignment_score[i]
-                F.write(f"\t{score:0.5f}")
-            propFixed = alignment_monomorphic_count[pgfam]/alignment_length[pgfam]
-            F.write(f"\t{alignment_length[pgfam]}\t{alignment_freq_sum[pgfam]:.2f}\t{len(alignment_counts[pgfam])}\t{propFixed:.3f}\n")
+            score = alignment_global_score[pgfam] 
+            prop = score / max_alignment_score
+            F.write(f"{pgfam}\t{score:0.4f}\t{prop:0.4f}\t{alignment_length[pgfam]}\n")
     print(f"alignment global scores written to {alignment_global_score_file}")
+    #sys.exit()
 
 
     alignment_names.append("total_alignment")
@@ -315,6 +249,7 @@ def main():
             pf = global_apart_freq[bitstring]
         alignment_vector.append(pf)
     alignment_vector_list.append(alignment_vector)
+
 
     alignment_v_df = pandas.DataFrame(alignment_vector_list, index=alignment_names, columns=shared_bitstrings)
 
