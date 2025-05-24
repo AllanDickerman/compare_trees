@@ -20,7 +20,23 @@ def read_fasta(fh):
             seqs[seqid] += line.rstrip()
     return seqs
 
-def count_alignment_partitions(al, seqid_list):
+def score_tree_partitions(tree, normalize=False):
+    bem = tree.bipartition_edge_map
+    total_length = 0 # can use to normalize partition scores to sum to 1.0
+    for bipart in bem:
+        if (bem[bipart].length is not None):
+            total_length += bem[bipart].length
+    partition_length = {}
+    for bipart in bem:
+        if (bem[bipart].length is not None):
+            bitstring = bipart.leafset_as_bitstring(reverse=True)
+            length = bem[bipart].length
+            if normalize:
+                lenght /= total_length # convert to proportion of total tree length
+            partition_length[bitstring] = length 
+    return (partition_length, total_length)
+
+def count_alignment_partitions(al, seqid_list, normalize=False):
     partition_counts = {}
     al_length = len(al[seqid_list[0]])
     #print(f"count_partitions, al_length = {al_length}")
@@ -39,7 +55,10 @@ def count_alignment_partitions(al, seqid_list):
             bitstring = str(bv)
             if bitstring not in partition_counts:
                 partition_counts[bitstring] = 0
-            partition_counts[bitstring] += 1/len(bitvector_dict)
+            increment = 1
+            if normalize:
+                increment = 1/len(bitvector_dict)
+            partition_counts[bitstring] += increment
     return(partition_counts, al_length)
 
 def generate_umap_plot(data, n_neighbors=[10,30,100]):
@@ -80,6 +99,8 @@ def main():
     parser.add_argument("--trees", metavar='files', type=str, nargs='*', help="nexus tree files")
     parser.add_argument("--alignments", metavar='dir', type=str, help="directory with alignments")
     parser.add_argument("--write_matrix", action='store_true', help="write partition matrix and separate column list")
+    parser.add_argument("--normalize_alignment_scores", action='store_true', help="adjust for multiple states, alignment scores sum to 1.0")
+    parser.add_argument("--normalize_tree_scores", action='store_true', help="divide tree scores by tree length, tree scores sum to 1.0")
 
     args = parser.parse_args()
 
@@ -87,7 +108,6 @@ def main():
     print(f"alignment dir = {args.alignments}")
 
     tree_bitstring_length = {}
-    tree_total_length = {}
     partition_count = {}
     global_tree_partition_length = {}
     taxa = dendropy.TaxonNamespace()
@@ -99,25 +119,15 @@ def main():
     for tree_idx, one_tree in enumerate(tree_yielder):
         print(one_tree.label+"    \t"+str(tree_idx))
         tree_label = one_tree.label.replace(' ', '_')
-        m = re.search("(PGF.\d+)", one_tree.label)
-        #if m:
-        #    tree_label = m.group(1) #pgfam
-        tree_bitstring_length[tree_label] = {}
-        bem = one_tree.bipartition_edge_map
-        total_length = 0 # normalize branch length to sum to 1.0
-        for bipart in bem:
-            total_length += bem[bipart].length
-        tree_total_length[tree_label] = total_length
-        for bipart in bem:
-            if (bem[bipart].length is not None):
-                bitstring = bipart.leafset_as_bitstring(reverse=True)
-                #tree_bitstring_length[tree_label][bitstring] = bem[bipart].length / total_length
-                tree_bitstring_length[tree_label][bitstring] = bem[bipart].length 
-                if not bitstring in partition_count:
-                    partition_count[bitstring] = 0
-                    global_tree_partition_length[bitstring] = 0
-                partition_count[bitstring] += 1
-                global_tree_partition_length[bitstring] += bem[bipart].length 
+        (tree_scores, tree_length) = score_tree_partitions(one_tree, normalize = args.normalize_tree_scores)
+        tree_bitstring_length[tree_label] = tree_scores
+        for bitstring in tree_scores:
+            if not bitstring in partition_count:
+                partition_count[bitstring] = 0
+                global_tree_partition_length[bitstring] = 0
+            partition_count[bitstring] += 1
+            global_tree_partition_length[bitstring] += tree_scores[bitstring]
+
     tree_bl_mean = 0
     unnormalized_sum = 0
     for bs in global_tree_partition_length:
@@ -161,7 +171,7 @@ def main():
         alignment_counts[pgfam] = {}
         with open(alignment_file) as F:
             al = read_fasta(F)
-            pc, alength = count_alignment_partitions(al, taxon_list)
+            pc, alength = count_alignment_partitions(al, taxon_list, normalize=args.normalize_alignment_scores)
             total_length += alength
             alignment_length[pgfam] = alength
             alignment_monomorphic_count[pgfam] = pc[monomorphic_bs]
