@@ -56,8 +56,8 @@ for file in glob.glob(align_dir+"*"):
                 comp_dmat[pair] = {}
             comp_dmat[pair][pgfam] = dmat.matrix[i][j]
 
-    if len(pgfam_list) > 200:
-        break
+    #if len(pgfam_list) > 200:
+    #    break
 
 for genomeId in perGenomeLogFreq:
     if genomeAlignmentCount[genomeId]:
@@ -133,9 +133,9 @@ for pgfam in pgfam_list:
     wt = worst_taxa[0]
     print(f"{pgfam}\t{pgfam_delta[pgfam]:.5f}\t{pgfam_avg_dist[pgfam]:.5f}\t{pgfam_worst_seq_score[pgfam]:.3f}\t{pgfam_taxon_delta[pgfam][wt]:.4f}\t{wt}")
     #print(f"{pgfam}\t{pgfam_delta[pgfam]:.5f}\t{pgfam_delta[pgfam] / pgfam_avg_dist[pgfam]:5f}\t{pgfam_worst_seq_score[pgfam]:.3f}")
-    wts = "  worst taxa: "
-    for t in worst_taxa[:4]:
-        wts += f"\t{t}:{pgfam_taxon_delta[pgfam][t]:.4f}:{pgfam_taxon_delta[pgfam][t]/pgfam_avg_dist[pgfam]:.5f}"
+    #wts = "  worst taxa: "
+    #for t in worst_taxa[:4]:
+    #    wts += f"\t{t}:{pgfam_taxon_delta[pgfam][t]:.4f}:{pgfam_taxon_delta[pgfam][t]/(pgfam_avg_dist[pgfam]+ 1e-6):.5f}"
     #print(wts)
 
 F = open("test_al_dist_vs_log_freq.txt", 'w')

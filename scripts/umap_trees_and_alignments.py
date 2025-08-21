@@ -32,7 +32,7 @@ def score_tree_partitions(tree, normalize=False):
             bitstring = bipart.leafset_as_bitstring(reverse=True)
             length = bem[bipart].length
             if normalize:
-                lenght /= total_length # convert to proportion of total tree length
+                length /= total_length # convert to proportion of total tree length
             partition_length[bitstring] = length 
     return (partition_length, total_length)
 
@@ -42,11 +42,14 @@ def count_alignment_partitions(al, seqid_list, normalize=False):
     #print(f"count_partitions, al_length = {al_length}")
     for pos in range(al_length):
         bitvector_dict = {}
+        num_seqs = 0
         for i, seqid in enumerate(seqid_list):
-            state = al[seqid][pos]
-            if state not in bitvector_dict:
-                bitvector_dict[state] = BitVector.BitVector(size = len(seqid_list))
-            bitvector_dict[state][i] = 1
+            if seqid in al:
+                state = al[seqid][pos]
+                if state not in bitvector_dict:
+                    bitvector_dict[state] = BitVector.BitVector(size = len(seqid_list))
+                bitvector_dict[state][i] = 1
+                num_seqs += 1
         for state in bitvector_dict:
             bv = bitvector_dict[state]
             bitcount = bv.count_bits()
@@ -168,19 +171,22 @@ def main():
         else:
             pgfam = alignment_file
         pgfam += "_"+alignment_type
-        alignment_counts[pgfam] = {}
         with open(alignment_file) as F:
             al = read_fasta(F)
-            pc, alength = count_alignment_partitions(al, taxon_list, normalize=args.normalize_alignment_scores)
-            total_length += alength
-            alignment_length[pgfam] = alength
-            alignment_monomorphic_count[pgfam] = pc[monomorphic_bs]
-            #print(f" num partitions = {len(pc)}")
-            for bs in pc:
-                if bs not in global_apart_counts:
-                    global_apart_counts[bs] = 0
-                global_apart_counts[bs] += pc[bs]
-                alignment_counts[pgfam][bs] = (pc[bs] / alength)
+            if len(al) == len(taxon_list): # skipe alignments with fewer than all taxa
+                pc, alength = count_alignment_partitions(al, taxon_list, normalize=args.normalize_alignment_scores)
+                total_length += alength
+                alignment_length[pgfam] = alength
+                alignment_monomorphic_count[pgfam] = 0
+                if monomorphic_bs in pc:
+                    alignment_monomorphic_count[pgfam] = pc[monomorphic_bs]
+                #print(f" num partitions = {len(pc)}")
+                alignment_counts[pgfam] = {}
+                for bs in pc:
+                    if bs not in global_apart_counts:
+                        global_apart_counts[bs] = 0
+                    global_apart_counts[bs] += pc[bs]
+                    alignment_counts[pgfam][bs] = (pc[bs] / alength)
     print(f"num bitstrings seen in alignments = {len(global_apart_counts)}")
 
     global_apart_freq = {}
