@@ -135,7 +135,11 @@ def main():
         pgfam_tree_file.write(f"Tree {pgfam}_{args.alphabet}_tree = {tree}\n")
         F = open(alignment_file)
         F.readline() # first def line
-        aligned_seq1 = F.readline().rstrip()
+        aligned_seq1 = ''
+        for line in F:
+            if line.startswith('>'):
+                break
+            aligned_seq1 += line.rstrip()
         alignment_length = len(aligned_seq1)
         per_site_loglikelihood = float(likelihood) / alignment_length
         alignment_score_file.write(f"{pgfam}\t{alignment_length}\t{likelihood}\t{per_site_loglikelihood}\t{time}\n")
