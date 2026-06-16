@@ -17,6 +17,14 @@ def read_fasta(fh):
             #print("Seq_id = "+seqid)
             seqs[seqid] = ''
         else:
+            if not seqid in seqs:
+                print(f"error id {seqId} not found in {seqs.keys()}\nline={line}")
+                line = fh.readline()
+                print(f"next line = {line}")
+                fh.seek(0)
+                line = fh.readline()
+                print(f"first line = {line}")
+                raise Exception("reading seq ID when reading alignments yielded error")
             seqs[seqid] += line.rstrip()
     return seqs
 
